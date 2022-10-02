@@ -21,10 +21,15 @@ import (
 	"github.com/ccding/go-stun/stun"
 )
 
+// 스턴 서버 목록 - https://ourcodeworld.com/articles/read/1536/list-of-free-functional-public-stun-servers-2021
+// stun.actionvoip.com:3478
+// stun.cablenet-as.net:3478
+// stun.dcalling.de:3478
+
 func main() {
-	var serverAddr = flag.String("s", stun.DefaultServerAddr, "STUN server address")
+	var serverAddr = flag.String("s", "stun.rockenstein.de:3478", "STUN server address")
 	var b = flag.Bool("b", false, "NAT behavior test mode")
-	var v = flag.Bool("v", false, "verbose mode")
+	var v = flag.Bool("v", true, "verbose mode")
 	var vv = flag.Bool("vv", false, "double verbose mode (includes -v)")
 	var vvv = flag.Bool("vvv", false, "triple verbose mode (includes -v and -vv)")
 	flag.Parse()

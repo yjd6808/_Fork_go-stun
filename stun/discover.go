@@ -21,53 +21,55 @@ import (
 
 // Follow RFC 3489 and RFC 5389.
 // Figure 2: Flow for type discovery process (from RFC 3489).
-//                        +--------+
-//                        |  Test  |
-//                        |   I    |
-//                        +--------+
-//                             |
-//                             |
-//                             V
-//                            /\              /\
-//                         N /  \ Y          /  \ Y             +--------+
-//          UDP     <-------/Resp\--------->/ IP \------------->|  Test  |
-//          Blocked         \ ?  /          \Same/              |   II   |
-//                           \  /            \? /               +--------+
-//                            \/              \/                    |
-//                                             | N                  |
-//                                             |                    V
-//                                             V                    /\
-//                                         +--------+  Sym.      N /  \
-//                                         |  Test  |  UDP    <---/Resp\
-//                                         |   II   |  Firewall   \ ?  /
-//                                         +--------+              \  /
-//                                             |                    \/
-//                                             V                     |Y
-//                  /\                         /\                    |
-//   Symmetric  N  /  \       +--------+   N  /  \                   V
-//      NAT  <--- / IP \<-----|  Test  |<--- /Resp\               Open
-//                \Same/      |   I    |     \ ?  /               Internet
-//                 \? /       +--------+      \  /
-//                  \/                         \/
-//                  |Y                          |Y
-//                  |                           |
-//                  |                           V
-//                  |                           Full
-//                  |                           Cone
-//                  V              /\
-//              +--------+        /  \ Y
-//              |  Test  |------>/Resp\---->Restricted
-//              |   III  |       \ ?  /
-//              +--------+        \  /
-//                                 \/
-//                                  |N
-//                                  |       Port
-//                                  +------>Restricted
-func (c *Client) discover(conn net.PacketConn, addr *net.UDPAddr) (NATType, *Host, error) {
+//
+//	                     +--------+
+//	                     |  Test  |
+//	                     |   I    |
+//	                     +--------+
+//	                          |
+//	                          |
+//	                          V
+//	                         /\              /\
+//	                      N /  \ Y          /  \ Y             +--------+
+//	       UDP     <-------/Resp\--------->/ IP \------------->|  Test  |
+//	       Blocked         \ ?  /          \Same/              |   II   |
+//	                        \  /            \? /               +--------+
+//	                         \/              \/                    |
+//	                                          | N                  |
+//	                                          |                    V
+//	                                          V                    /\
+//	                                      +--------+  Sym.      N /  \
+//	                                      |  Test  |  UDP    <---/Resp\
+//	                                      |   II   |  Firewall   \ ?  /
+//	                                      +--------+              \  /
+//	                                          |                    \/
+//	                                          V                     |Y
+//	               /\                         /\                    |
+//	Symmetric  N  /  \       +--------+   N  /  \                   V
+//	   NAT  <--- / IP \<-----|  Test  |<--- /Resp\               Open
+//	             \Same/      |   I    |     \ ?  /               Internet
+//	              \? /       +--------+      \  /
+//	               \/                         \/
+//	               |Y                          |Y
+//	               |                           |
+//	               |                           V
+//	               |                           Full
+//	               |                           Cone
+//	               V              /\
+//	           +--------+        /  \ Y
+//	           |  Test  |------>/Resp\---->Restricted
+//	           |   III  |       \ ?  /
+//	           +--------+        \  /
+//	                              \/
+//	                               |N
+//	                               |       Port
+//	                               +------>Restricted
+func (c *Client) discover(conn net.PacketConn, stun_server_addr *net.UDPAddr) (NATType, *Host, error) {
 	// Perform test1 to check if it is under NAT.
-	c.logger.Debugln("Do Test1")
-	c.logger.Debugln("Send To:", addr)
-	resp, err := c.test1(conn, addr)
+	c.logger.Debugln("[[ TEST I ]]")
+	c.logger.Debugln("send from:", conn.LocalAddr())
+	c.logger.Debugln("send to:", stun_server_addr)
+	resp, err := c.test1(conn, stun_server_addr)
 	if err != nil {
 		return NATError, nil, err
 	}
@@ -81,9 +83,14 @@ func (c *Client) discover(conn net.PacketConn, addr *net.UDPAddr) (NATType, *Hos
 	changedAddr := resp.changedAddr
 	// mappedAddr is used as the return value, its IP is used for tests
 	mappedAddr := resp.mappedAddr
+
+	c.logger.Debugln("is-open-internet:", identical)
+	c.logger.Debugln("changed-address:", changedAddr)
+	c.logger.Debugln("mapped-address:", mappedAddr)
+
 	// Make sure IP and port are not changed.
-	if resp.serverAddr.IP() != addr.IP.String() ||
-		resp.serverAddr.Port() != uint16(addr.Port) {
+	if resp.serverAddr.IP() != stun_server_addr.IP.String() ||
+		resp.serverAddr.Port() != uint16(stun_server_addr.Port) {
 		return NATError, mappedAddr, errors.New("Server error: response IP/port")
 	}
 	// if changedAddr is not available, use otherAddr as changedAddr,
@@ -97,17 +104,18 @@ func (c *Client) discover(conn net.PacketConn, addr *net.UDPAddr) (NATType, *Hos
 	}
 	// Perform test2 to see if the client can receive packet sent from
 	// another IP and port.
-	c.logger.Debugln("Do Test2")
-	c.logger.Debugln("Send To:", addr)
-	resp, err = c.test2(conn, addr)
+	c.logger.Debugln("[[ TEST II ]]")
+	c.logger.Debugln("send from:", conn.LocalAddr())
+	c.logger.Debugln("send to:", stun_server_addr)
+	resp, err = c.test2(conn, stun_server_addr)
 	if err != nil {
 		return NATError, mappedAddr, err
 	}
 	c.logger.Debugln("Received:", resp)
 	// Make sure IP and port are changed.
 	if resp != nil &&
-		(resp.serverAddr.IP() == addr.IP.String() ||
-			resp.serverAddr.Port() == uint16(addr.Port)) {
+		(resp.serverAddr.IP() == stun_server_addr.IP.String() ||
+			resp.serverAddr.Port() == uint16(stun_server_addr.Port)) {
 		return NATError, mappedAddr, errors.New("Server error: response IP/port")
 	}
 	if identical {
@@ -121,8 +129,9 @@ func (c *Client) discover(conn net.PacketConn, addr *net.UDPAddr) (NATType, *Hos
 	}
 	// Perform test1 to another IP and port to see if the NAT use the same
 	// external IP.
-	c.logger.Debugln("Do Test1")
-	c.logger.Debugln("Send To:", changedAddr)
+	c.logger.Debugln("[[ TEST I ]]")
+	c.logger.Debugln("send from:", conn.LocalAddr())
+	c.logger.Debugln("send to changed address:", changedAddr)
 	caddr, err := net.ResolveUDPAddr("udp", changedAddr.String())
 	if err != nil {
 		c.logger.Debugf("ResolveUDPAddr error: %v", err)
@@ -131,7 +140,7 @@ func (c *Client) discover(conn net.PacketConn, addr *net.UDPAddr) (NATType, *Hos
 	if err != nil {
 		return NATError, mappedAddr, err
 	}
-	c.logger.Debugln("Received:", resp)
+	c.logger.Debugln("received:", resp)
 	if resp == nil {
 		// It should be NAT_BLOCKED, but will be detected in the first
 		// step. So this will never happen.
@@ -145,8 +154,8 @@ func (c *Client) discover(conn net.PacketConn, addr *net.UDPAddr) (NATType, *Hos
 	if mappedAddr.IP() == resp.mappedAddr.IP() && mappedAddr.Port() == resp.mappedAddr.Port() {
 		// Perform test3 to see if the client can receive packet sent
 		// from another port.
-		c.logger.Debugln("Do Test3")
-		c.logger.Debugln("Send To:", caddr)
+		c.logger.Debugln("[[ TEST III ]]")
+		c.logger.Debugln("send to changed address:", caddr)
 		resp, err = c.test3(conn, caddr)
 		if err != nil {
 			return NATError, mappedAddr, err

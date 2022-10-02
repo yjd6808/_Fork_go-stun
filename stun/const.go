@@ -16,7 +16,7 @@ package stun
 
 // Default server address and client name.
 const (
-	DefaultServerAddr   = "stun.ekiga.net:3478"
+	DefaultServerAddr   = "stun1.l.google.com:19302"
 	DefaultSoftwareName = "StunClient"
 )
 

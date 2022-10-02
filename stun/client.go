@@ -82,7 +82,11 @@ func (c *Client) Discover() (NATType, *Host, error) {
 	if c.serverAddr == "" {
 		c.SetServerAddr(DefaultServerAddr)
 	}
+
 	serverUDPAddr, err := net.ResolveUDPAddr("udp", c.serverAddr)
+	c.logger.Debugln("stun-server-name:", c.serverAddr)
+	c.logger.Debugln("stun-server-address:", serverUDPAddr)
+
 	if err != nil {
 		return NATError, nil, err
 	}
@@ -91,10 +95,12 @@ func (c *Client) Discover() (NATType, *Host, error) {
 	conn := c.conn
 	if conn == nil {
 		conn, err = net.ListenUDP("udp", nil)
+
 		if err != nil {
 			return NATError, nil, err
 		}
 		defer conn.Close()
+		c.logger.Debugln("client-local-bind test:", conn.LocalAddr())
 	}
 	return c.discover(conn, serverUDPAddr)
 }
